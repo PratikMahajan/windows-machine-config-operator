@@ -15,7 +15,7 @@ OSDK=$(get_operator_sdk)
 
 WMC_CRD_PATH=$WMCO_ROOT/deploy/crds/wmc.openshift.io_windowsmachineconfigs_crd.yaml
 WMC_CRD=$(cat $WMC_CRD_PATH)
-CRD_GEN="$OSDK generate crds --crd-version=v1beta1"
+CRD_GEN="$OSDK generate crds"
 
 # Run generator and read new state
 $CRD_GEN
