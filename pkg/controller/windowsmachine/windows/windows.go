@@ -36,6 +36,8 @@ const (
 	cniConfDir = cniDir + "config\\"
 	// kubeProxyPath is the location of the kube-proxy exe
 	kubeProxyPath = k8sDir + "kube-proxy.exe"
+	// windowsExporterPath is the location of the windows_exporter exe
+	windowsExporterPath = remoteDir + "windows_exporter.exe"
 	// HybridOverlayProcess is the process name of the hybrid-overlay-node.exe in the Windows VM
 	HybridOverlayProcess = "hybrid-overlay-node"
 	// hybridOverlayConfigurationTime is the approximate time taken for the hybrid-overlay to complete reconfiguring
@@ -47,6 +49,8 @@ const (
 	OVNKubeOverlayNetwork = "OVNKubernetesHybridOverlayNetwork"
 	// kubeProxyServiceName is the name of the kube-proxy Windows service
 	kubeProxyServiceName = "kube-proxy"
+	// windowsExporterServiceName is the name of the windows_exporter Windows service
+	windowsExporterServiceName = "windows_exporter"
 	// remotePowerShellCmdPrefix holds the PowerShell prefix that needs to be prefixed  for every remote PowerShell
 	// command executed on the remote Windows VM
 	remotePowerShellCmdPrefix = "powershell.exe -NonInteractive -ExecutionPolicy Bypass "
@@ -74,6 +78,8 @@ type Windows interface {
 	ConfigureCNI(string) error
 	// ConfigureHybridOverlay ensures that the hybrid overlay is running on the node
 	ConfigureHybridOverlay(string) error
+	// ConfigureWindowsExporter ensures that the windows metrics exporter is running on the node
+	ConfigureWindowsExporter() error
 	// ConfigureKubeProxy ensures that the kube-proxy service is running
 	ConfigureKubeProxy(string, string) error
 }
@@ -206,6 +212,25 @@ func (vm *windows) ConfigureHybridOverlay(nodeName string) error {
 	return nil
 }
 
+func (vm *windows) ConfigureWindowsExporter() error {
+	// configures service to collect and expose metrics at endpoint with default port :9182 and default URL path /metrics
+	windowsExporterServiceArgs := "--collectors.enabled " +
+		"\"cpu,cs,logical_disk,net,os,service,system,textfile,container,memory\""
+
+	windowsExporterService, err := newService(windowsExporterPath, windowsExporterServiceName, windowsExporterServiceArgs)
+	if err != nil {
+		return errors.Wrap(err, "error creating service object")
+	}
+	if err := vm.createService(windowsExporterService); err != nil {
+		return errors.Wrap(err, "error creating windows_exporter Windows service")
+	}
+	if err := vm.startService(windowsExporterService); err != nil {
+		return errors.Wrap(err, "error starting windows_exporter Windows service")
+	}
+
+	return nil
+}
+
 func (vm *windows) ConfigureCNI(configFile string) error {
 	// copy the CNI config file to the Windows VM
 	if err := vm.CopyFile(configFile, cniConfDir); err != nil {
@@ -231,9 +256,16 @@ func (vm *windows) ConfigureKubeProxy(nodeName, hostSubnet string) error {
 	if err != nil {
 		return errors.Wrap(err, "error getting source VIP")
 	}
-	kubeProxyService, err := newKubeProxyService(nodeName, hostSubnet, sVIP)
+
+	kubeProxyServiceArgs := "--windows-service --v=4 --proxy-mode=kernelspace --feature-gates=WinOverlay=true " +
+		"--hostname-override=" + nodeName + " --kubeconfig=c:\\k\\kubeconfig " +
+		"--cluster-cidr=" + hostSubnet + " --log-dir=" + kubeProxyLogDir + " --logtostderr=false " +
+		"--network-name=OVNKubernetesHybridOverlayNetwork --source-vip=" + sVIP +
+		" --enable-dsr=false"
+
+	kubeProxyService, err := newService(kubeProxyPath, kubeProxyServiceName, kubeProxyServiceArgs)
 	if err != nil {
-		return errors.Wrap(err, "error creating service object")
+		return errors.Wrap(err, "error creating kube-proxy service object")
 	}
 	// Check if service is already running, then stop it.
 	if vm.isRunning(kubeProxyService) {
@@ -279,6 +311,7 @@ func (vm *windows) transferFiles() error {
 		wkl.WmcbPath:                 k8sDir,
 		wkl.HybridOverlayPath:        k8sDir,
 		wkl.HNSPSModule:              remoteDir,
+		wkl.WindowsExporterPath:      remoteDir,
 		wkl.FlannelCNIPluginPath:     cniDir,
 		wkl.WinBridgeCNIPlugin:       cniDir,
 		wkl.HostLocalCNIPlugin:       cniDir,
@@ -339,9 +372,9 @@ func (vm *windows) initializeBootstrapperFiles() error {
 }
 
 // createService creates the service on the Windows VM
-func (vm *windows) createService(svc service) error {
-	out, err := vm.Run("sc.exe create "+svc.Name()+" binPath=\""+svc.BinaryPath()+" "+
-		svc.Args()+"\" start=auto", false)
+func (vm *windows) createService(svc *service) error {
+	out, err := vm.Run("sc.exe create "+svc.name+" binPath=\""+svc.binaryPath+" "+
+		svc.args+"\" start=auto", false)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create service with output: %s", out)
 	}
@@ -349,31 +382,31 @@ func (vm *windows) createService(svc service) error {
 }
 
 // stopService stops the service that was already running
-func (vm *windows) stopService(svc service) error {
-	out, err := vm.Run("sc.exe stop "+svc.Name(), false)
+func (vm *windows) stopService(svc *service) error {
+	out, err := vm.Run("sc.exe stop "+svc.name, false)
 	if err != nil {
-		return errors.Wrapf(err, "failed to stop %s service with output: %s", svc.Name(), out)
+		return errors.Wrapf(err, "failed to stop %s service with output: %s", svc.name, out)
 	}
 	return nil
 }
 
 // isRunning gets the status of given service
-func (vm *windows) isRunning(svc service) bool {
-	out, err := vm.Run("sc.exe query "+svc.Name(), false)
+func (vm *windows) isRunning(svc *service) bool {
+	out, err := vm.Run("sc.exe query "+svc.name, false)
 	if err != nil {
-		log.Info("failed to query service", "service", svc.Name(), "output", out, "err", err)
+		log.Info("failed to query service", "service", svc.name, "output", out, "err", err)
 		return false
 	}
 	return strings.Contains(out, "RUNNING")
 }
 
 // startService starts a previously created Windows service
-func (vm *windows) startService(svc service) error {
-	out, err := vm.Run("sc.exe start "+svc.Name(), false)
+func (vm *windows) startService(svc *service) error {
+	out, err := vm.Run("sc.exe start "+svc.name, false)
 	if err != nil {
-		return errors.Wrapf(err, "failed to start %s service with output: %s", svc.Name(), out)
+		return errors.Wrapf(err, "failed to start %s service with output: %s", svc.name, out)
 	}
-	log.V(1).Info("started service", "name", svc.Name(), "binary", svc.BinaryPath(), "args", svc.Args())
+	log.V(1).Info("started service", "name", svc.name, "binary", svc.binaryPath, "args", svc.args)
 	return nil
 }
 

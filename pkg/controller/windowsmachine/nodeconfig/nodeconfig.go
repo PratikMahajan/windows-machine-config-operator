@@ -13,7 +13,7 @@ import (
 	"github.com/openshift/windows-machine-config-operator/version"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
-	"k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -41,7 +41,7 @@ type nodeConfig struct {
 	// Windows holds the information related to the windows VM
 	windows.Windows
 	// Node holds the information related to node object
-	node *v1.Node
+	node *corev1.Node
 	// network holds the network information specific to the node
 	network *network
 	// clusterServiceCIDR holds the service CIDR for cluster
@@ -136,6 +136,10 @@ func (nc *nodeConfig) Configure() error {
 	if err := nc.configureNetwork(); err != nil {
 		return errors.Wrap(err, "configuring node network failed")
 	}
+	// Start Windows metrics exporter service
+	if err := nc.Windows.ConfigureWindowsExporter(); err != nil {
+		return errors.Wrapf(err, "error configuring windows_exporter for %s", nc.node.GetName())
+	}
 
 	// Now that the node has been fully configured, add the version annotation to signify that the node
 	// was successfully configured by this version of WMCO
@@ -186,6 +190,7 @@ func (nc *nodeConfig) configureNetwork() error {
 	if err := nc.Windows.ConfigureKubeProxy(nc.node.GetName(), nc.node.Annotations[HybridOverlaySubnet]); err != nil {
 		return errors.Wrapf(err, "error starting kube-proxy for %s", nc.node.GetName())
 	}
+
 	return nil
 }
 

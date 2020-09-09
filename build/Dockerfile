@@ -26,6 +26,18 @@ RUN git clone --single-branch --branch release-4.6 https://github.com/openshift/
 WORKDIR ovn-kubernetes/go-controller/
 RUN make windows
 
+# Build promu utility tool
+WORKDIR /build/
+RUN git clone --single-branch --branch v0.6.1 https://github.com/prometheus/promu
+WORKDIR /build/promu/
+RUN make build
+
+# Build windows_exporter
+WORKDIR /build/
+RUN git clone --single-branch --branch v0.13.0 https://github.com/prometheus-community/windows_exporter
+WORKDIR /build/windows_exporter/
+RUN GO111MODULE=on GOOS=windows ./../promu/promu build -v
+
 # Build Kubernetes node binaries
 WORKDIR /build/
 RUN git clone --branch release-4.6 https://github.com/openshift/kubernetes
@@ -58,6 +70,7 @@ RUN ./build_windows.sh
 #├── powershell
 #│   └── wget-ignore-cert.ps1
 #│   └── hns.psm1
+#├── windows_exporter.exe
 #└── wmcb.exe
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
@@ -70,6 +83,9 @@ COPY --from=build /build/windows-machine-config-bootstrapper/wmcb.exe .
 
 # Copy hybrid-overlay-node.exe
 COPY --from=build /build/ovn-kubernetes/go-controller/_output/go/bin/windows/hybrid-overlay-node.exe .
+
+# Copy windows_exporter.exe
+COPY --from=build /build/windows_exporter/windows_exporter.exe .
 
 # Copy kubelet.exe and kube-proxy.exe
 RUN mkdir /payload/kube-node/
