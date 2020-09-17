@@ -26,6 +26,7 @@ func testNetwork(t *testing.T) {
 	defer testCtx.deleteNamespace(testCtx.workloadNamespace)
 	t.Run("East West Networking across Linux and Windows nodes", testEastWestNetworking)
 	t.Run("East West Networking across Windows nodes", testEastWestNetworkingAcrossWindowsNodes)
+	t.Run("East West Networking from Linux node to Windows node's metrics endpoint", testEastWestNetworkingMetrics)
 	t.Run("North south networking", testNorthSouthNetworking)
 }
 
@@ -141,6 +142,35 @@ func testEastWestNetworkingAcrossWindowsNodes(t *testing.T) {
 
 	if err = testCtx.deleteJob(winCurlerJobOnSecondNode.Name); err != nil {
 		t.Logf("could not delete job %s", winCurlerJobOnSecondNode.Name)
+	}
+}
+
+// testEastWestNetworkingMetrics deploys Linux pod and tests that it can communicate with Windows node's metrics port
+func testEastWestNetworkingMetrics(t *testing.T) {
+	testCtx, err := NewTestContext(t)
+	require.NoError(t, err)
+
+	// Need at least one Windows node to run these tests, throwing error if this condition is not met
+	require.GreaterOrEqualf(t, len(gc.nodes), 1, "insufficient number of Windows nodes to run tests across"+
+		" nodes, Minimum node count: 1, Current node count: %d", len(gc.nodes))
+
+	for _, winNode := range gc.nodes {
+		// Get the node internal IP so we can curl it
+		winNodeInternalIP := winNode.Status.Addresses[0].Address
+
+		// This will install curl and then curl the Windows VM for collected metrics
+		linuxCurlerCommand := []string{"bash", "-c", "yum update; yum install curl -y; curl " +
+			"http://" + winNodeInternalIP + ":9182/metrics"}
+		linuxCurlerJob, err := testCtx.createLinuxJob("linux-curler-"+strings.ToLower(winNode.Status.NodeInfo.MachineID),
+			linuxCurlerCommand)
+		require.NoError(t, err, "could not create Linux job")
+		err = testCtx.waitUntilJobSucceeds(linuxCurlerJob.Name)
+		assert.NoError(t, err, "could not curl the Windows VM metrics endpoint from a linux container")
+
+		// delete the job created
+		if err = testCtx.deleteJob(linuxCurlerJob.Name); err != nil {
+			t.Logf("could not delete job %s", linuxCurlerJob.Name)
+		}
 	}
 }
 
