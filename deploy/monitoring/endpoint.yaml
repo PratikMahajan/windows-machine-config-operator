@@ -1,0 +1,14 @@
+kind: Endpoints
+apiVersion: v1
+metadata:
+  name: windows-metrics
+  namespace: openshift-windows
+  labels:
+    k8s-app: windows-metrics
+subsets:
+  - addresses:
+      - ip: <windows_machine_private_ip>
+    ports:
+      - port: 9182
+        protocol: TCP
+        name: metrics

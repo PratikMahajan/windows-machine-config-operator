@@ -1,0 +1,16 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: windows-metrics
+  namespace: openshift-windows
+  labels:
+    k8s-app: windows-metrics
+spec:
+  type: ExternalName
+  externalName: <windows_machine_private_ip>
+  clusterIP: ""
+  ports:
+    - name: metrics
+      protocol: TCP
+      port: 9182
+      targetPort: 9182

@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: node-exporter
+  namespace: openshift-windows
+  labels:
+    k8s-app: windows-metrics
+    prometheus: prometheus-k8s
+spec:
+  selector:
+    matchLabels:
+      k8s-app: windows-metrics
+  endpoints:
+    - port: metrics
+      interval: 30s
+      honorLabels: true
