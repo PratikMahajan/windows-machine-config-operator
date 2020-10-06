@@ -1,0 +1,60 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  labels:
+    machine.openshift.io/cluster-api-cluster: pmahajan-aws-l4p19-nn9mc
+  name: pmahajan-aws-l4p19-nn9mc-windows-worker-us-east-2a
+  namespace: openshift-machine-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: pmahajan-aws-l4p19-nn9mc
+      machine.openshift.io/cluster-api-machineset: pmahajan-aws-l4p19-nn9mc-windows-worker-us-east-2a
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: pmahajan-aws-l4p19-nn9mc
+        machine.openshift.io/cluster-api-machine-role: worker
+        machine.openshift.io/cluster-api-machine-type: worker
+        machine.openshift.io/cluster-api-machineset: pmahajan-aws-l4p19-nn9mc-windows-worker-us-east-2a
+        machine.openshift.io/os-id: Windows
+    spec:
+      metadata:
+        labels:
+          node-role.kubernetes.io/worker: ""
+      providerSpec:
+        value:
+          ami:
+            id: ami-07ca515d1af004629
+          apiVersion: awsproviderconfig.openshift.io/v1beta1
+          blockDevices:
+            - ebs:
+                iops: 0
+                volumeSize: 120
+                volumeType: gp2
+          credentialsSecret:
+            name: aws-cloud-credentials
+          deviceIndex: 0
+          iamInstanceProfile:
+            id: pmahajan-aws-l4p19-nn9mc-worker-profile
+          instanceType: m5a.large
+          kind: AWSMachineProviderConfig
+          placement:
+            availabilityZone: us-east-2a
+            region: us-east-2
+          securityGroups:
+            - filters:
+                - name: tag:Name
+                  values:
+                    - pmahajan-aws-l4p19-nn9mc-worker-sg
+          subnet:
+            filters:
+              - name: tag:Name
+                values:
+                  - pmahajan-aws-l4p19-nn9mc-private-us-east-2a
+          tags:
+            - name: kubernetes.io/cluster/pmahajan-aws-l4p19-nn9mc
+              value: owned
+          userDataSecret:
+            name: windows-user-data

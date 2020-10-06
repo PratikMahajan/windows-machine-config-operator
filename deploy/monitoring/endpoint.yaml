@@ -5,9 +5,12 @@ metadata:
   namespace: openshift-windows
   labels:
     k8s-app: windows-metrics
+    app.kubernetes.io/name: windows-exporter
 subsets:
   - addresses:
-      - ip: <windows_machine_private_ip>
+      - ip: 10.0.145.237
+      - ip: 10.0.157.46
+      - ip: 10.0.158.86
     ports:
       - port: 9182
         protocol: TCP
