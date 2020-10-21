@@ -8,9 +8,7 @@ metadata:
     app.kubernetes.io/name: windows-exporter
 subsets:
   - addresses:
-      - ip: 10.0.145.237
-      - ip: 10.0.157.46
-      - ip: 10.0.158.86
+      - ip: 10.0.139.65
     ports:
       - port: 9182
         protocol: TCP
