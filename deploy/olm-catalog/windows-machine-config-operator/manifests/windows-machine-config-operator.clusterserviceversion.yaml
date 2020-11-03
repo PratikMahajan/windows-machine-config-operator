@@ -94,7 +94,7 @@ spec:
       deployments:
       - name: windows-machine-config-operator
         spec:
-          replicas: 1
+          replicas: 2
           selector:
             matchLabels:
               name: windows-machine-config-operator
